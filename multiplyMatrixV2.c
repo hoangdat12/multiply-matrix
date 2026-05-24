@@ -11,7 +11,7 @@
 #endif
 
 // =========================================================================
-// 1. CẤU TRÚC ĐỒNG BỘ THREAD POOL (SYNC PRIMITIVES)
+// 1. CẤU TRÚC ĐỒNG BỘ THREAD POOL
 // =========================================================================
 pthread_mutex_t pool_mtx = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t  cv_start = PTHREAD_COND_INITIALIZER;
@@ -42,23 +42,49 @@ static inline void avx_block(
     int16_t *ci, const int16_t *ai, const int16_t *bi,
     int Mr, int Nr, int Kc, int ldc, int lda, int ldb)
 {
-    for (int i = 0; i < Mr; i++) {
-        __m256i cr  = _mm256_loadu_si256((const __m256i *)&c[i * ldc]);
-        __m256i cri = _mm256_loadu_si256((const __m256i *)&ci[i * ldc]);
+    __m256i cr0  = _mm256_loadu_si256((const __m256i *)&c[0 * ldc]);
+    __m256i cri0 = _mm256_loadu_si256((const __m256i *)&ci[0 * ldc]);
+    __m256i cr1  = _mm256_loadu_si256((const __m256i *)&c[1 * ldc]);
+    __m256i cri1 = _mm256_loadu_si256((const __m256i *)&ci[1 * ldc]);
+    __m256i cr2  = _mm256_loadu_si256((const __m256i *)&c[2 * ldc]);
+    __m256i cri2 = _mm256_loadu_si256((const __m256i *)&ci[2 * ldc]);
+    __m256i cr3  = _mm256_loadu_si256((const __m256i *)&c[3 * ldc]);
+    __m256i cri3 = _mm256_loadu_si256((const __m256i *)&ci[3 * ldc]);
 
-        for (int k = 0; k < Kc; k++) {
-            __m256i ar  = _mm256_set1_epi16(a[i * lda + k]);
-            __m256i aii = _mm256_set1_epi16(ai[i * lda + k]);
-            __m256i br  = _mm256_loadu_si256((const __m256i *)&b[k * ldb]);
-            __m256i bii = _mm256_loadu_si256((const __m256i *)&bi[k * ldb]);
+    for (int k = 0; k < Kc; k++) {
+        __m256i br  = _mm256_loadu_si256((const __m256i *)&b[k * ldb]);
+        __m256i bii = _mm256_loadu_si256((const __m256i *)&bi[k * ldb]);
+        __m256i ar, aii;
 
-            cr  = _mm256_add_epi16(cr, _mm256_sub_epi16(_mm256_mullo_epi16(ar, br), _mm256_mullo_epi16(aii, bii)));
-            cri = _mm256_add_epi16(cri, _mm256_add_epi16(_mm256_mullo_epi16(ar, bii), _mm256_mullo_epi16(aii, br)));
-        }
+        ar  = _mm256_set1_epi16(a[0 * lda + k]);
+        aii = _mm256_set1_epi16(ai[0 * lda + k]);
+        cr0  = _mm256_add_epi16(cr0,  _mm256_sub_epi16(_mm256_mullo_epi16(ar, br), _mm256_mullo_epi16(aii, bii)));
+        cri0 = _mm256_add_epi16(cri0, _mm256_add_epi16(_mm256_mullo_epi16(ar, bii), _mm256_mullo_epi16(aii, br)));
 
-        _mm256_storeu_si256((__m256i *)&c[i * ldc],  cr);
-        _mm256_storeu_si256((__m256i *)&ci[i * ldc], cri);
+        ar  = _mm256_set1_epi16(a[1 * lda + k]);
+        aii = _mm256_set1_epi16(ai[1 * lda + k]);
+        cr1  = _mm256_add_epi16(cr1,  _mm256_sub_epi16(_mm256_mullo_epi16(ar, br), _mm256_mullo_epi16(aii, bii)));
+        cri1 = _mm256_add_epi16(cri1, _mm256_add_epi16(_mm256_mullo_epi16(ar, bii), _mm256_mullo_epi16(aii, br)));
+
+        ar  = _mm256_set1_epi16(a[2 * lda + k]);
+        aii = _mm256_set1_epi16(ai[2 * lda + k]);
+        cr2  = _mm256_add_epi16(cr2,  _mm256_sub_epi16(_mm256_mullo_epi16(ar, br), _mm256_mullo_epi16(aii, bii)));
+        cri2 = _mm256_add_epi16(cri2, _mm256_add_epi16(_mm256_mullo_epi16(ar, bii), _mm256_mullo_epi16(aii, br)));
+
+        ar  = _mm256_set1_epi16(a[3 * lda + k]);
+        aii = _mm256_set1_epi16(ai[3 * lda + k]);
+        cr3  = _mm256_add_epi16(cr3,  _mm256_sub_epi16(_mm256_mullo_epi16(ar, br), _mm256_mullo_epi16(aii, bii)));
+        cri3 = _mm256_add_epi16(cri3, _mm256_add_epi16(_mm256_mullo_epi16(ar, bii), _mm256_mullo_epi16(aii, br)));
     }
+
+    _mm256_storeu_si256((__m256i *)&c[0 * ldc], cr0);
+    _mm256_storeu_si256((__m256i *)&ci[0 * ldc], cri0);
+    _mm256_storeu_si256((__m256i *)&c[1 * ldc], cr1);
+    _mm256_storeu_si256((__m256i *)&ci[1 * ldc], cri1);
+    _mm256_storeu_si256((__m256i *)&c[2 * ldc], cr2);
+    _mm256_storeu_si256((__m256i *)&ci[2 * ldc], cri2);
+    _mm256_storeu_si256((__m256i *)&c[3 * ldc], cr3);
+    _mm256_storeu_si256((__m256i *)&ci[3 * ldc], cri3);
 }
 
 static inline void scalar_block(
@@ -87,7 +113,8 @@ void* pool_worker_thread(void* arg) {
     ThreadParam* p = (ThreadParam*)arg;
     int my_last_work_id = 0; 
     
-    const int Mc = 256, Kc = 4, Nc = 32;
+    // Đã đồng nhất Mc = 192 (vừa khít 26KB L1 Cache)
+    const int Mc = 192, Kc = 4, Nc = 32;
     const int Mr = 4, Nr = 16; 
 
     while (1) {
@@ -197,7 +224,8 @@ void dispatch_slot_to_pool(
     int16_t *C_real, int16_t *C_imag,
     int M, int K, int N)
 {
-    const int Mc = 180;
+    // Đã đồng nhất Mc = 192 cho khâu làm tròn chia block
+    const int Mc = 192;
     int raw_rows_per_thread = (M + num_pool_threads - 1) / num_pool_threads;
     int rows_per_thread = ((raw_rows_per_thread + Mc - 1) / Mc) * Mc;
 
@@ -232,7 +260,7 @@ void dispatch_slot_to_pool(
 }
 
 // =========================================================================
-// 4. HÀM CHẠY SINGLE THREAD (Bản cũ dùng làm Baseline)
+// 4. HÀM CHẠY SINGLE THREAD (Baseline)
 // =========================================================================
 void multiply_ikj_avx_block_single(
     const int16_t *A_real, const int16_t *A_imag,
@@ -240,7 +268,8 @@ void multiply_ikj_avx_block_single(
     int16_t *C_real, int16_t *C_imag,
     int M, int K, int N)
 {
-    const int Mc = 180, Kc = 4, Nc = 32;
+    // Đã đồng nhất Mc = 192
+    const int Mc = 192, Kc = 4, Nc = 32;
     const int Mr = 4, Nr = 16; 
 
     memset(C_real, 0, M * N * sizeof(*C_real));
@@ -307,7 +336,8 @@ int main() {
     int M = 45864, K = 4, N = 32;
     int size_A = M * K, size_B = K * N, size_C = M * N;
 
-    printf("=== BENCHMARK THREAD POOL 5G SLOT: %dx%d * %dx%d ===\n", M, K, K, N);
+    printf("=== BENCHMARK THREAD POOL 5G SLOT (Tối ưu 8 Luồng - Mc=192) ===\n");
+    printf("Matrix size: %dx%d * %dx%d\n\n", M, K, K, N);
     
     int16_t *A_real = aligned_alloc(32, size_A * sizeof(int16_t));
     int16_t *A_imag = aligned_alloc(32, size_A * sizeof(int16_t));
@@ -330,43 +360,35 @@ int main() {
     multiply_ikj_avx_block_single(A_real, A_imag, B_real, B_imag, C_ref_real, C_ref_imag, M, K, N);
     end = get_time();
     double time_single = (end - start) * 1000.0;
-    printf("[Baseline] Single-thread : %8.3f ms\n\n", time_single);
+    printf("[Baseline] Single-thread : %8.3f ms\n", time_single);
 
-    // --- CHẠY THREAD POOL VỚI NHIỀU CẤU HÌNH LUỒNG ---
-    int thread_counts[] = {2, 4, 6, 8, 12, 16};
-    int num_tests = sizeof(thread_counts) / sizeof(thread_counts[0]);
+    // --- CHẠY THREAD POOL (Fix cứng 8 Luồng) ---
+    int threads = 8;
+    init_thread_pool(threads);
+    
+    // Warm-up cache (Chạy mồi)
+    dispatch_slot_to_pool(A_real, A_imag, B_real, B_imag, C_test_real, C_test_imag, M, K, N);
+    
+    // Xóa rác
+    memset(C_test_real, 0, size_C * sizeof(int16_t));
+    memset(C_test_imag, 0, size_C * sizeof(int16_t));
+    
+    // Đo thật
+    start = get_time();
+    dispatch_slot_to_pool(A_real, A_imag, B_real, B_imag, C_test_real, C_test_imag, M, K, N);
+    end = get_time();
+    
+    double time_multi = (end - start) * 1000.0;
+    double speedup = time_single / time_multi;
 
-    for (int i = 0; i < num_tests; i++) {
-        int threads = thread_counts[i];
-        
-        // Khởi động trạm
-        init_thread_pool(threads);
-        
-        // Warm-up cache (Chạy mồi 1 lần để CPU nạp lệnh và đánh thức luồng)
-        dispatch_slot_to_pool(A_real, A_imag, B_real, B_imag, C_test_real, C_test_imag, M, K, N);
-        
-        // Xóa kết quả rác từ lúc warm-up
-        memset(C_test_real, 0, size_C * sizeof(int16_t));
-        memset(C_test_imag, 0, size_C * sizeof(int16_t));
-        
-        // ĐO THỜI GIAN THỰC TẾ
-        start = get_time();
-        dispatch_slot_to_pool(A_real, A_imag, B_real, B_imag, C_test_real, C_test_imag, M, K, N);
-        end = get_time();
-        
-        double time_multi = (end - start) * 1000.0;
-        double speedup = time_single / time_multi;
+    int is_correct = verify_result(C_ref_real, C_test_real, size_C) && 
+                     verify_result(C_ref_imag, C_test_imag, size_C);
 
-        int is_correct = verify_result(C_ref_real, C_test_real, size_C) && 
-                         verify_result(C_ref_imag, C_test_imag, size_C);
+    printf("[ThreadPool] %2d threads  : %8.3f ms | Speedup: %4.2fx | Correct: %s %s\n", 
+           threads, time_multi, speedup, is_correct ? "YES" : "NO!", 
+           (time_multi < 0.5) ? " [ <0.5ms ]" : "");
 
-        printf("[ThreadPool] %2d threads  : %8.3f ms | Speedup: %4.2fx | Correct: %s %s\n", 
-               threads, time_multi, speedup, is_correct ? "YES" : "NO!", 
-               (time_multi < 0.5) ? " [ <0.5ms ]" : "");
-
-        // Tắt trạm để chuẩn bị test số luồng tiếp theo
-        destroy_thread_pool();
-    }
+    destroy_thread_pool();
 
     free(A_real); free(A_imag); free(B_real); free(B_imag);
     free(C_ref_real); free(C_ref_imag); free(C_test_real); free(C_test_imag);

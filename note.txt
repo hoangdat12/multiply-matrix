@@ -1,0 +1,8 @@
+### Cross build on EC2 Instance
+
+### Copy file to EC2
+./copyfile.sh -ip 54.254.216.92 -filename benchmark
+
+### Cross build
+gcc -O3 -mavx2 -mfma -pthread -std=c11 multiplyMatrix.c -o benchmark -lm
+
