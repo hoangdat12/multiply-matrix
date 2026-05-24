@@ -1,5 +1,10 @@
 # Matrix Multiply Optimization
 
+Tối ưu phép nhân ma trận phức số cho kênh PDSCH 5G NR theo chuẩn 3GPP.  
+Cấu hình: **32T32R – 4 Layers – 100MHz** | Resource Grid: `3276 × 4` × `4 × 32` → `3276 × 32`
+
+> Lưu ý: Nội dung trong repo này dựa trên kiến thức cá nhân, có thể không chính xác.
+
 ---
 
 ## Kiến trúc CPU.
@@ -176,6 +181,76 @@ Hệ thống thao tác trực tiếp với POSIX Threads (`pthreads`) thay vì c
   
 ![Cache](./images/explainchoosecachevalue.png)
 
+### Chạy repo
+
+#### Cấu trúc thư mục
+
+```
+.
+├── build/               # Output của quá trình biên dịch
+│   └── multiplyMatrix   # Binary thực thi (được tạo bởi make)
+│
+├── images/              # Hình ảnh minh họa, sơ đồ kiến trúc
+│
+├── logs/                # Kết quả benchmark và log chạy thực tế
+│
+├── scripts/             # Script tiện ích (benchmark, sweep, ...)
+│
+├── .gitignore           # Các file/thư mục không track bằng git
+├── Makefile             # Build system – xem hướng dẫn bên dưới
+├── multiplyMatrix.c     # Toàn bộ source code các thuật toán
+├── note.txt             # Ghi chú phát triển, số liệu thô
+└── Readme.md            # File này
+```
+
+#### Build & chạy
+
+```bash
+make        # biên dịch → build/matmul
+make run    # biên dịch và chạy benchmark
+make clean  # xóa thư mục build/
+```
+
+**Yêu cầu:** GCC với support `-mavx2`, Linux/pthreads.
+
+#### Kết quả benchmark (tham khảo)
+
+Chạy trên CPU hỗ trợ AVX2 với `M=3276, K=4, N=32, NUM_THREAD=8`:
+
+```
+1. Basic ijk                ~baseline
+2. Basic ikj                ~3–4×  faster
+3. Block ikj                ~4–5×  faster
+4. AVX2 No-Block            ~10×   faster
+5. AVX2 Block               ~12×   faster
+6. ThreadPool AVX2+Block    ~60×   faster
+7. ThreadPool AVX2 NoBl     ~55×   faster
+```
+
+#### Kiểm tra các cờ tối ưu -O0 -O1 -O2 -O3.
+``` bash
+bash ./scripts/benchmarkFlags.sh
+```
+
+#### Sweep để tìm giá trị tối ưu.
+
+### Run code on the EC2 Instance
+
+- Install gcc and git.
+
+```bash
+sudo dnf update -y
+sudo dnf install -y gcc gcc-c++ git make
+```
+
+- Check
+
+```bash
+gcc --version
+g++ --version
+git --version
+make --version
+```
 
 ---
 

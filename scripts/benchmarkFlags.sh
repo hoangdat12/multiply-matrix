@@ -4,13 +4,13 @@
 # CONFIG
 # =========================
 
-SRC="../multiplyMatrixAMX2.c"
+SRC="../multiplyMatrix.c"
 OUTDIR="../build"
 LOGDIR="../logs"
 
 RUNS=10
 
-BASE_FLAGS="-mavx2 -march=native"
+BASE_FLAGS="-mavx2 -march=native -lpthread"
 
 FLAGS=(
     "-O0"
@@ -19,20 +19,26 @@ FLAGS=(
     "-O3"
 )
 
+# Prefix khớp với printf trong file C
 FUNC_LABELS=(
-    "1."
-    "2."
-    "3."
-    "4."
-    "5."
+    "1. Basic ijk"
+    "2. Basic ikj"
+    "3. Block ikj"
+    "4. AVX2 No-Block ikj"
+    "5. AVX2 Block ikj"
+    "6. ThreadPool AVX2+Block"
+    "7. ThreadPool AVX2 NoBl"
 )
 
+# Tên hiển thị trong bảng tổng kết
 FUNC_DISPLAY=(
     "ijk"
     "ikj"
-    "ikj Block"
-    "ikj Block AVX2"
-    "ikj AVX2"
+    "Block ikj"
+    "AVX2 NoBl"
+    "AVX2 Block"
+    "Pool+Block"
+    "Pool NoBl"
 )
 
 # =========================
@@ -61,8 +67,7 @@ for FLAG in "${FLAGS[@]}"; do
     echo "================================="
     echo "BUILD + RUN: $FLAG $BASE_FLAGS"
     echo "================================="
-    
-    # gcc multiplyMatrixAMX2.c -O3 -mavx2 -march=native -o multiplyMatrixAMX2
+
     gcc $SRC $FLAG $BASE_FLAGS -o $BIN
 
     if [ $? -ne 0 ]; then
@@ -73,7 +78,7 @@ for FLAG in "${FLAGS[@]}"; do
         continue
     fi
 
-    # Không hiện output của hàm thực thi ra command line
+    # Warm-up run (không tính)
     $BIN > /dev/null 2>&1
 
     declare -A TOTAL
@@ -84,7 +89,11 @@ for FLAG in "${FLAGS[@]}"; do
     for ((i=1; i<=RUNS; i++)); do
         OUTPUT=$($BIN)
         for label in "${FUNC_LABELS[@]}"; do
-            TIME=$(echo "$OUTPUT" | grep "^[[:space:]]*${label}" | grep -oP '[\d.]+(?=\s*ms)')
+            # Output format: "1. Basic ijk               X.XXXX ms  ..."
+            # grep dòng bắt đầu bằng label (có thể có khoảng trắng đầu dòng)
+            # lấy số float đầu tiên trước chữ "ms"
+            TIME=$(echo "$OUTPUT" | grep "^\s*$(echo "$label" | sed 's/[.+]/\\&/g')" \
+                   | grep -oP '[\d]+\.[\d]+(?=\s*ms)' | head -1)
             if [ -z "$TIME" ]; then TIME="0"; fi
             TOTAL["$label"]=$(awk "BEGIN {printf \"%.6f\", ${TOTAL[$label]} + $TIME}")
         done
@@ -93,7 +102,7 @@ for FLAG in "${FLAGS[@]}"; do
     echo " done"
 
     for label in "${FUNC_LABELS[@]}"; do
-        AVG=$(awk "BEGIN {printf \"%.6f\", ${TOTAL[$label]} / $RUNS}")
+        AVG=$(awk "BEGIN {printf \"%.4f\", ${TOTAL[$label]} / $RUNS}")
         FINAL_AVG["${FLAG}___${label}"]=$AVG
     done
 
@@ -105,25 +114,28 @@ done
 # =========================
 
 print_table() {
+    # Header
     printf "%-6s" "Flag"
     for display in "${FUNC_DISPLAY[@]}"; do
-        printf " | %-16s" "$display"
+        printf " | %-12s" "$display"
     done
     printf "\n"
 
+    # Separator
     printf "%s" "------"
     for display in "${FUNC_DISPLAY[@]}"; do
-        printf "%s" "-+------------------"
+        printf "%s" "-+--------------"
     done
     printf "\n"
 
+    # Rows
     for FLAG in "${FLAGS[@]}"; do
         printf "%-6s" "$FLAG"
         for label in "${FUNC_LABELS[@]}"; do
             KEY="${FLAG}___${label}"
             VAL="${FINAL_AVG[$KEY]}"
             if [ -z "$VAL" ]; then VAL="N/A"; fi
-            printf " | %-16s" "${VAL} ms"
+            printf " | %-12s" "${VAL} ms"
         done
         printf "\n"
     done

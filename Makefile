@@ -1,13 +1,24 @@
-CC = gcc
-CFLAGS = -Wall -g 
-TARGET = fftImplement.exe
+CC      := gcc
+BUILD   := build
+TARGET  := $(BUILD)/multiplyMatrix
+SRC     := multiplyMatrix.c
 
-SRC = fftImplement.c
+# Flags
+CFLAGS  := -O3 -mavx2 -march=native -Wall -Wextra
+LDFLAGS := -lpthread
+
+.PHONY: all run clean
 
 all: $(TARGET)
 
-$(TARGET): $(SRC)
-	$(CC) $(CFLAGS) -o $(TARGET) $(SRC) -lm
+$(BUILD):
+	mkdir -p $(BUILD)
+
+$(TARGET): $(SRC) | $(BUILD)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+run: $(TARGET)
+	./$(TARGET)
 
 clean:
-	rm -f $(TARGET)
+	rm -rf $(BUILD)
